@@ -1,0 +1,48 @@
+# Operations and recovery
+
+## Local services and troubleshooting
+
+`docker compose up --build -d --wait` starts PostgreSQL, licensed LocalStack and the app. `docker compose logs app` shows structured startup and worker logs. Readiness is `/actuator/health/readiness`; liveness is `/actuator/health/liveness`. Hikari/Flyway startup failure keeps the app unavailable. AWS outages do not prevent booking transactions; outbox age is a separate degradation signal, not grounds to restart healthy HTTP replicas.
+
+A LocalStack authentication/license failure requires a valid assigned token and outbound access to its licensing service. Never disable licensing or quietly substitute another emulator. The initialization hook is executable and idempotent: bus/rule/queue creation plus policy and attribute reconciliation. If routing is silent, inspect the rule, queue policy and both DLQs. AWS PutEvents can report success when publishing to a nonexistent bus: initialization and deployment must verify that the configured bus exists. SDK retries cannot fix a misspelled bus.
+
+A 409 SEAT_UNAVAILABLE means another transaction owns one or more selected seats. Refresh and choose again. A 503 RETRY_TRANSACTION/OVERLOADED may be lock, connection or scheduler pressure. Retry with jitter using the original reservation key; never generate a new key merely because the HTTP response timed out. A key reused with different seats is a 409 IDEMPOTENCY_CONFLICT. Customer lookup deliberately returns 404 for another user's booking. Unsupported callback signatures are rejected before database work.
+
+Do not run multiple local stacks against the same host ports. `docker compose down` retains named data volumes; `down -v` deletes local history and is only appropriate when intentionally discarding demo data. The task's diagnostic host run may disable AWS workers; restore `WORKERS_AWS_ENABLED=true` for the required complete integration path.
+
+## Outbox and message recovery
+
+1. Inspect oldest undelivered rows and `last_error`, queue visible/inflight counts, target DLQ and consumer DLQ separately.
+2. Restore EventBridge access/rule/target policy. Pending outbox claims become reclaimable after 60 seconds. No global reset or new event IDs are needed.
+3. A publication/mark crash results in duplicate delivery. Keep original event IDs and aggregate versions. Consumer receipts and monotonic projection updates tolerate replay.
+4. For target DLQ events, fix queue policy/target ARN first, inspect EventBridge error attributes, and re-publish the preserved original detail using source `cinema.booking` and type `BookingChanged.v1`.
+5. For consumer poison messages, export body and metadata to restricted incident storage, fix schema/consumer defects, and replay only validated envelopes. Do not repeatedly redrive an invalid body. `scripts/messaging-smoke.py` demonstrates quarantine/deletion followed by safe replay of a valid original event.
+6. Never delete financial obligations to clear alarms. Reconcile provider charges by booking UUID before marking payment/refund outcomes. Replaying a provider request must retain its idempotency key and amount/currency.
+
+Outbox publication uses a 60-second lease, <=15-second AWS API call, <=5-second marking transaction, and fencing token. SQS visibility is 60 seconds, individual database processing <=5 seconds, receive batch <=5. Failures extend visibility exponentially up to 300 seconds; after five receives SQS moves the body to the consumer DLQ. EventBridge delivery retries last at most one hour with ten retries before its separate target DLQ. Both DLQs retain 14 days; source queue retains four days.
+
+Outbox, consumer receipt, ticket and payment records are **not automatically purged**. This avoids unsafe loss of deduplication/financial history. Establish retention and archival with applicable business/legal requirements. Never delete consumer receipts while corresponding events can still be replayed; if retaining a 30-day replay archive, retain deduplication longer than 30 days plus all queue/DLQ windows. Booking keys are retained with booking history. A future retention migration must preserve uniqueness for historical charge/refund keys. Monitor database growth; archival is an explicit production prerequisite.
+
+## Metrics, tracing and shutdown
+
+Prometheus `/actuator/prometheus` requires an ADMIN token. It exposes HTTP/JVM/Hikari metrics plus `cinema_outbox_pending`, `cinema_outbox_oldest_seconds`, `cinema_refunds_pending`, and `cinema_bookings_failed`. Configure a metrics collector with a short-lived service JWT; do not expose this endpoint publicly without authentication. Micrometer tracing/OTLP dependencies and automatic Reactor context propagation are included; configure and verify an OTLP collector in the deployment environment before claiming end-to-end traces. Business logs contain operational identifiers/error types, not JWTs, callback signatures, personal data, or payment credentials.
+
+Suggested alerts: oldest outbox >60 seconds warning / >300 critical; either DLQ >0; oldest SQS message >120 seconds; refunds pending >15 minutes; booking failure-rate increase; HTTP 5xx or p95 breach; Hikari pending >0 sustained; database connections near budget; scheduler rejection/503 increases; CPU/memory saturation. CloudFormation supplies SQS and RDS connection alarms and an SNS topic; subscribe an on-call destination before production. Prometheus application alarms and tracing collector hookup require your monitoring platform. Sample metrics/rules are in `infra/local/prometheus-alerts.yaml`.
+
+Workers are fixed-delay, not overlapping within a replica. Stop drains workers for up to 25 seconds, AWS calls have bounded timeouts, Boot graceful HTTP shutdown has 30 seconds, and container stop grace is 40 seconds. Unfinished outbox work is recovered by lease expiry; unacknowledged SQS messages reappear; database transactions rollback on connection loss. SSE connections are short-lived and clients reconnect after deployment.
+
+## Migrations and recovery
+
+Flyway validates checksums and applies forward migrations. Local seed migration lives outside production locations. Do not edit an applied migration; add a new version. Use expand/migrate/contract for rolling deploys. Production should run migrations as a separately controlled job with a DDL credential, then run application tasks with a restricted DML role and `spring.flyway.enabled=false`. The supplied initial stack uses the RDS-managed master credential to bootstrap; replacing it with distinct runtime/migration users is a deployment gate, not a least-privilege database claim.
+
+RDS is private, encrypted, multi-AZ with 14-day backups, deletion protection and snapshot retention on replacement/deletion. Take an on-demand snapshot before risky migrations. Restore into a separate instance, validate schema/version/row counts and business invariants, then switch connections through a reviewed cutover. Verify restored outbox and dedupe windows; provider charges that happened after the recovery point must be reconciled before resuming charging. Test both pg_dump/pg_restore and RDS point-in-time recovery. Region/account replication, retention, RPO/RTO and restore drills require operator decisions.
+
+Rolling back an application image is safe only while schema changes remain backward compatible. Do not undo settled payments or tickets by restoring a database blindly. Use compensating business operations and reconcile the provider ledger.
+
+## AWS deployment preparation
+
+`infra/aws/stack.json` uses CloudFormation, avoiding a separate Terraform provider dependency. It creates VPC/subnets in two AZs, one NAT per AZ, private ECS and RDS, HTTPS ALB, WAF, encrypted SQS queues, separate DLQs, EventBridge bus/rule, scoped runtime and execution roles, CloudWatch logs, alarms and an SNS topic. Secrets Manager manages the RDS password and injects the existing external provider secret. Runtime role can publish only to the cinema bus and consume only the notification queue. EventBridge SendMessage policy is restricted to the exact rule ARN. Execution role is limited to the supplied ECR repository, logs and two secret ARNs, except ECR GetAuthorizationToken which requires `*`.
+
+Prepare parameters for an ARM64 image digest, matching ECR repository ARN, ACM certificate, DNS/origin, external OIDC issuer/JWKS/audience, real provider secret, and a PostgreSQL engine version available in the target region. Image must contain the real provider adapter; production startup otherwise fails closed. DesiredCount defaults to zero. Once prerequisites are validated, production needs at least two healthy tasks. No deployment command is run by the smoke/build scripts. Creating even a zero-task stack incurs NAT, RDS, ALB and other charges, so provisioning needs separate authorization.
+
+The stack's master database credential, unrestricted outbound security-group egress (required for provider/OIDC access through NAT), missing cross-region backup copy, and external monitoring/identity/provider integrations remain explicit hardening items. Create VPC endpoints/egress restrictions appropriate to your provider and region. Add DNS alias, certificate validation, alarm subscriptions, image signing/scan gates, secret rotation rollout, migration automation and capacity tests before increasing DesiredCount.

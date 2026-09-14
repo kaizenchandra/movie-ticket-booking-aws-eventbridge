@@ -1,0 +1,9 @@
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/local
+local:
+  keys: ${LOCAL_KEYS:.local}
+  customer-password: ${LOCAL_CUSTOMER_PASSWORD}
+  admin-password: ${LOCAL_ADMIN_PASSWORD}
+payment:
+  callback-secret: ${PAYMENT_CALLBACK_SECRET}

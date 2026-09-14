@@ -1,0 +1,33 @@
+package com.kaizenchandra.awseventbridgedemo.notifications.adapter.out;
+
+import org.springframework.stereotype.Component;
+
+import java.util.*;
+import java.time.*;
+
+import tools.jackson.databind.json.JsonMapper;
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
+import com.kaizenchandra.awseventbridgedemo.notifications.application.IntegrationEvent;
+import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
+
+@Component
+public class Outbox implements com.kaizenchandra.awseventbridgedemo.booking.application.BookingEvents {
+    private final Sql sql;
+    private final JsonMapper json;
+    private final Clock clock;
+
+    public Outbox(Sql sql, JsonMapper json, Clock clock) {
+        this.sql = sql;
+        this.json = json;
+        this.clock = clock;
+    }
+
+    public void append(Booking b) {
+        var previous = sql.query("SELECT id FROM outbox WHERE aggregate_id=?1 AND aggregate_version=?2", b.id(), b.version() - 1).getResultList();
+        UUID cause = previous.isEmpty() ? b.id() : Sql.uuid(previous.getFirst());
+        var span=io.opentelemetry.api.trace.Span.current().getSpanContext();
+        String traceParent=span.isValid()?"00-"+span.getTraceId()+"-"+span.getSpanId()+"-"+span.getTraceFlags().asHex():null;
+        var e = new IntegrationEvent(UUID.randomUUID(), 1, "BookingChanged", b.id(), b.version(), clock.instant(), b.id(), cause, b.status().name(), b.showId(), traceParent);
+        sql.update("INSERT INTO outbox(id,aggregate_id,aggregate_version,type,payload,created_at,available_at) VALUES(?1,?2,?3,?4,?5,?6,?6)", e.eventId(), b.id(), b.version(), e.type(), json.writeValueAsString(e), clock.instant());
+    }
+}
