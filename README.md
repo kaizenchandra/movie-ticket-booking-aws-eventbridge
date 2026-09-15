@@ -10,6 +10,7 @@ Requires Java 21, Docker Compose v2, Python 3, OpenSSL, and a **LocalStack auth 
 ./scripts/local-setup.sh
 # Set LOCALSTACK_AUTH_TOKEN in your shell using your LocalStack account; do not commit it.
 docker compose up --build -d --wait
+# docker compose --env-file .env up --build -d --wait
 ./scripts/smoke.sh
 ./scripts/messaging-smoke.py
 ```
@@ -17,7 +18,7 @@ docker compose up --build -d --wait
 For the optional two-replica live-update check (Compose 2.24.4+):
 
 ```sh
-docker compose -f compose.yaml -f compose.replica.yaml up --build -d --wait
+docker compose -f docker-compose.yaml -f compose.replica.yaml up --build -d --wait
 ./scripts/replica-smoke.py
 ```
 

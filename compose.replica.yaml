@@ -3,6 +3,6 @@
 services:
   replica:
     extends:
-      file: compose.yaml
+      file: docker-compose.yaml
       service: app
     ports: !override ["127.0.0.1:8081:8080"]
