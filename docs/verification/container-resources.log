@@ -1,0 +1,12 @@
+cinema-container-verification CPU=154.69% Memory=400.6MiB / 1GiB
+aws-eventbridge-demo-postgres-1 CPU=5.43% Memory=48.14MiB / 8.787GiB
+cinema-container-verification CPU=76.04% Memory=407.9MiB / 1GiB
+aws-eventbridge-demo-postgres-1 CPU=6.99% Memory=48.45MiB / 8.787GiB
+cinema-container-verification CPU=57.41% Memory=417.5MiB / 1GiB
+aws-eventbridge-demo-postgres-1 CPU=4.10% Memory=47.99MiB / 8.787GiB
+cinema-container-verification CPU=44.32% Memory=447.9MiB / 1GiB
+aws-eventbridge-demo-postgres-1 CPU=1.82% Memory=55.45MiB / 8.787GiB
+cinema-container-verification CPU=42.98% Memory=452.4MiB / 1GiB
+aws-eventbridge-demo-postgres-1 CPU=2.07% Memory=55.81MiB / 8.787GiB
+cinema-container-verification CPU=0.56% Memory=453.2MiB / 1GiB
+aws-eventbridge-demo-postgres-1 CPU=0.09% Memory=55.54MiB / 8.787GiB

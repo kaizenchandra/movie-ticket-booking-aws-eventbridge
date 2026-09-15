@@ -1,0 +1,34 @@
+[
+  {
+    "name": "com.kaizenchandra.awseventbridgedemo.CinemaIT",
+    "tests": "24",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "7.264"
+  },
+  {
+    "name": "com.kaizenchandra.awseventbridgedemo.ArchitectureTest",
+    "tests": "4",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "2.233"
+  },
+  {
+    "name": "com.kaizenchandra.awseventbridgedemo.BookingTest",
+    "tests": "7",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.065"
+  },
+  {
+    "name": "com.kaizenchandra.awseventbridgedemo.SharedSnapshotsTest",
+    "tests": "2",
+    "failures": "0",
+    "errors": "0",
+    "skipped": "0",
+    "time": "0.49"
+  }
+]

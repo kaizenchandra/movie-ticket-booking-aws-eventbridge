@@ -1,0 +1,8 @@
+# Optional second application replica for the cross-replica SSE smoke test.
+# Requires Docker Compose with !override support (2.24.4+).
+services:
+  replica:
+    extends:
+      file: compose.yaml
+      service: app
+    ports: !override ["127.0.0.1:8081:8080"]
