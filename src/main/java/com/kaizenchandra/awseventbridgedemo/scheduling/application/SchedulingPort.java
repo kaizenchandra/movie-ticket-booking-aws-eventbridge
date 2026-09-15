@@ -1,7 +1,9 @@
 package com.kaizenchandra.awseventbridgedemo.scheduling.application;
 
-import java.util.*;
 import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public interface SchedulingPort {
     List<Map<String, Object>> shows(UUID movie, String city, Instant from, int page, int size);

@@ -1,10 +1,12 @@
 package com.kaizenchandra.awseventbridgedemo.booking.application;
 
-import java.util.*;
-import java.time.Instant;
-
 import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
 import com.kaizenchandra.awseventbridgedemo.scheduling.domain.Show;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
 
 public interface BookingStore {
     Show lockShow(UUID id);

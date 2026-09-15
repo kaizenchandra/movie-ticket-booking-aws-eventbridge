@@ -1,17 +1,19 @@
 package com.kaizenchandra.awseventbridgedemo.notifications.adapter.in;
 
-import org.springframework.web.bind.annotation.*;
+import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import com.kaizenchandra.awseventbridgedemo.inventory.application.InventoryPort;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Flux;
 
-import java.util.*;
-import java.time.*;
-
-import reactor.core.publisher.*;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
-import com.kaizenchandra.awseventbridgedemo.inventory.application.InventoryPort;
-import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import java.time.Clock;
+import java.time.Duration;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/live")

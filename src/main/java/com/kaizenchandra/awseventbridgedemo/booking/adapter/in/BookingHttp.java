@@ -1,18 +1,20 @@
 package com.kaizenchandra.awseventbridgedemo.booking.adapter.in;
 
-import org.springframework.web.bind.annotation.*;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.security.oauth2.jwt.Jwt;
+import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import com.kaizenchandra.awseventbridgedemo.booking.application.Bookings;
+import com.kaizenchandra.awseventbridgedemo.booking.application.TicketPort;
+import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
-
-import java.util.*;
-
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
-import com.kaizenchandra.awseventbridgedemo.booking.application.*;
-import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
-import com.kaizenchandra.awseventbridgedemo.booking.application.TicketPort;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
+
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/bookings")
@@ -27,13 +29,6 @@ public class BookingHttp {
         this.store = store;
         this.boundary = boundary;
         this.catalog = catalog;
-    }
-
-    public record Reserve(@NotNull UUID showId,
-                          @NotEmpty @Size(max = 8) List<@NotNull @Pattern(regexp = "[A-Za-z0-9-]{1,12}") String> seats) {
-    }
-
-    public record Pay(@NotNull String mode) {
     }
 
     @PostMapping
@@ -67,5 +62,12 @@ public class BookingHttp {
             bookings.get(jwt.getSubject(), id);
             return catalog.tickets(id);
         });
+    }
+
+    public record Reserve(@NotNull UUID showId,
+                          @NotEmpty @Size(max = 8) List<@NotNull @Pattern(regexp = "[A-Za-z0-9-]{1,12}") String> seats) {
+    }
+
+    public record Pay(@NotNull String mode) {
     }
 }

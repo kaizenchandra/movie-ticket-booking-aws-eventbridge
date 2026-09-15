@@ -1,13 +1,14 @@
 package com.kaizenchandra.awseventbridgedemo.catalog.adapter.out;
 
-import org.springframework.stereotype.Repository;
-
-import java.util.*;
-import java.time.*;
-
 import com.kaizenchandra.awseventbridgedemo.catalog.application.CatalogPort;
 import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
-import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
+import org.springframework.stereotype.Repository;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Repository
 public class JpaCatalog implements CatalogPort {

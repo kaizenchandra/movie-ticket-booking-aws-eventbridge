@@ -1,7 +1,8 @@
 package com.kaizenchandra.awseventbridgedemo.catalog.application;
 
-import java.util.*;
-import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 public interface CatalogPort {
     List<Map<String, Object>> movies(String title, int page, int size);

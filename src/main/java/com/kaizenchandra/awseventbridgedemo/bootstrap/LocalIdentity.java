@@ -1,21 +1,34 @@
 package com.kaizenchandra.awseventbridgedemo.bootstrap;
 
-import org.springframework.context.annotation.*;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.security.oauth2.jwt.*;
-
-import java.nio.file.*;
-import java.security.*;
-import java.security.interfaces.*;
-import java.security.spec.*;
-import java.util.*;
-import java.time.*;
-
-import com.nimbusds.jose.*;
-import com.nimbusds.jose.crypto.*;
-import com.nimbusds.jwt.*;
 import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyFactory;
+import java.security.MessageDigest;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
+import java.time.Clock;
+import java.util.Date;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Configuration
 @Profile("local")
@@ -51,9 +64,6 @@ public class LocalIdentity {
             this.clock = clock;
         }
 
-        public record Credentials(String username, String password) {
-        }
-
         @PostMapping("/local/token")
         public Map<String, Object> token(@RequestBody Credentials body) throws Exception {
             boolean isAdmin = "admin".equals(body.username());
@@ -63,6 +73,9 @@ public class LocalIdentity {
             var jwt = new SignedJWT(new JWSHeader(JWSAlgorithm.RS256), claims);
             jwt.sign(new RSASSASigner(key));
             return Map.of("access_token", jwt.serialize(), "expires_in", 900, "token_type", "Bearer");
+        }
+
+        public record Credentials(String username, String password) {
         }
     }
 }

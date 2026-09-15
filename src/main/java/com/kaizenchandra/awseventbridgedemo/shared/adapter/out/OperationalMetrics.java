@@ -1,13 +1,10 @@
 package com.kaizenchandra.awseventbridgedemo.shared.adapter.out;
 
-import org.springframework.stereotype.Component;
-import io.micrometer.core.instrument.MeterRegistry;
-
-import java.util.concurrent.atomic.*;
-import java.time.*;
-
 import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicLong;
 
 @Component
 public class OperationalMetrics {

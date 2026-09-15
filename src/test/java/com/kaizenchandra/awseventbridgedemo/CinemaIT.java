@@ -1,79 +1,72 @@
 package com.kaizenchandra.awseventbridgedemo;
 
-import org.junit.jupiter.api.*;
-
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.test.context.*;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import com.kaizenchandra.awseventbridgedemo.booking.application.Bookings;
+import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
+import com.kaizenchandra.awseventbridgedemo.booking.domain.BookingStatus;
+import com.kaizenchandra.awseventbridgedemo.catalog.application.CatalogPort;
+import com.kaizenchandra.awseventbridgedemo.notifications.adapter.in.NotificationConsumer;
+import com.kaizenchandra.awseventbridgedemo.notifications.adapter.out.OutboxDelivery;
+import com.kaizenchandra.awseventbridgedemo.payments.application.PaymentReconciler;
+import com.kaizenchandra.awseventbridgedemo.payments.domain.PaymentStatus;
+import com.kaizenchandra.awseventbridgedemo.payments.domain.RefundStatus;
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
+import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.*;
-import org.springframework.security.oauth2.jwt.*;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Bean;
+import org.springframework.security.oauth2.jwt.JwtValidators;
+import org.springframework.security.oauth2.jwt.NimbusReactiveJwtDecoder;
+import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.reactive.server.WebTestClient;
-import org.testcontainers.junit.jupiter.*;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
-
-import java.time.*;
-import java.util.*;
-import java.util.concurrent.*;
-import java.security.*;
-import java.security.interfaces.*;
-
-import com.nimbusds.jose.*;
-import com.nimbusds.jose.crypto.*;
-import com.nimbusds.jwt.*;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Schedulers;
 import reactor.test.StepVerifier;
 import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
-import software.amazon.awssdk.services.eventbridge.model.*;
-import com.kaizenchandra.awseventbridgedemo.booking.application.*;
-import com.kaizenchandra.awseventbridgedemo.booking.domain.*;
-import com.kaizenchandra.awseventbridgedemo.catalog.application.*;
-import com.kaizenchandra.awseventbridgedemo.shared.application.*;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.*;
-import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
-import com.kaizenchandra.awseventbridgedemo.payments.application.*;
-import com.kaizenchandra.awseventbridgedemo.payments.domain.*;
-import com.kaizenchandra.awseventbridgedemo.notifications.adapter.out.*;
-import com.kaizenchandra.awseventbridgedemo.notifications.adapter.in.*;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsResponse;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsResultEntry;
+
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.interfaces.RSAPrivateKey;
+import java.security.interfaces.RSAPublicKey;
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.*;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {"workers.enabled=false", "payment.callback-secret=test-callback-secret", "aws.endpoint=http://localhost:4566"})
 @ActiveProfiles("test")
 @Testcontainers
 class CinemaIT {
+    static final MutableClock time = new MutableClock();
     @Container
     static PostgreSQLContainer postgres = new PostgreSQLContainer("postgres:17.6");
-
-    @DynamicPropertySource
-    static void properties(DynamicPropertyRegistry r) {
-        r.add("spring.datasource.url", postgres::getJdbcUrl);
-        r.add("spring.datasource.username", postgres::getUsername);
-        r.add("spring.datasource.password", postgres::getPassword);
-    }
-
-    static class MutableClock extends Clock {
-        volatile Instant now = Instant.now();
-
-        public ZoneId getZone() {
-            return ZoneOffset.UTC;
-        }
-
-        public Clock withZone(ZoneId z) {
-            return this;
-        }
-
-        public Instant instant() {
-            return now;
-        }
-    }
-
-    static final MutableClock time = new MutableClock();
     static KeyPair keys;
 
     static {
@@ -83,22 +76,6 @@ class CinemaIT {
             keys = g.generateKeyPair();
         } catch (Exception e) {
             throw new RuntimeException(e);
-        }
-    }
-
-    @TestConfiguration
-    static class Config {
-        @Bean
-        @org.springframework.context.annotation.Primary
-        Clock testClock() {
-            return time;
-        }
-
-        @Bean
-        ReactiveJwtDecoder testDecoder() {
-            var d = NimbusReactiveJwtDecoder.withPublicKey((RSAPublicKey) keys.getPublic()).build();
-            d.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer("https://test.local"), j -> j.getAudience().contains("cinema") ? org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success() : org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.failure(new org.springframework.security.oauth2.core.OAuth2Error("audience"))));
-            return d;
         }
     }
 
@@ -132,6 +109,13 @@ class CinemaIT {
     int port;
     WebTestClient web;
     UUID show;
+
+    @DynamicPropertySource
+    static void properties(DynamicPropertyRegistry r) {
+        r.add("spring.datasource.url", postgres::getJdbcUrl);
+        r.add("spring.datasource.username", postgres::getUsername);
+        r.add("spring.datasource.password", postgres::getPassword);
+    }
 
     String token(String user) {
         return token(user, "cinema", Instant.now().plusSeconds(600));
@@ -194,14 +178,18 @@ class CinemaIT {
                 locked.countDown();
                 try {
                     if (!release.await(4, TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
-                } catch (InterruptedException e) { throw new RuntimeException(e); }
+                } catch (InterruptedException e) {
+                    throw new RuntimeException(e);
+                }
                 return b;
             }));
             try {
                 assertThat(locked.await(2, TimeUnit.SECONDS)).isTrue();
                 var second = executor.submit(() -> hold("independent-two", "A2"));
                 assertThat(second.get(1, TimeUnit.SECONDS).seats()).containsExactly("A2");
-            } finally { release.countDown(); }
+            } finally {
+                release.countDown();
+            }
             assertThat(first.get(2, TimeUnit.SECONDS).seats()).containsExactly("A1");
         }
     }
@@ -495,6 +483,38 @@ class CinemaIT {
             List<Object> result = new ArrayList<>();
             for (var f : futures) result.add(f.get(20, TimeUnit.SECONDS));
             return result;
+        }
+    }
+
+    static class MutableClock extends Clock {
+        volatile Instant now = Instant.now();
+
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        public Clock withZone(ZoneId z) {
+            return this;
+        }
+
+        public Instant instant() {
+            return now;
+        }
+    }
+
+    @TestConfiguration
+    static class Config {
+        @Bean
+        @org.springframework.context.annotation.Primary
+        Clock testClock() {
+            return time;
+        }
+
+        @Bean
+        ReactiveJwtDecoder testDecoder() {
+            var d = NimbusReactiveJwtDecoder.withPublicKey((RSAPublicKey) keys.getPublic()).build();
+            d.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(JwtValidators.createDefaultWithIssuer("https://test.local"), j -> j.getAudience().contains("cinema") ? org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.success() : org.springframework.security.oauth2.core.OAuth2TokenValidatorResult.failure(new org.springframework.security.oauth2.core.OAuth2Error("audience"))));
+            return d;
         }
     }
 }

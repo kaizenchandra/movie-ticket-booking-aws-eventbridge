@@ -1,12 +1,13 @@
 package com.kaizenchandra.awseventbridgedemo.payments.application;
 
-import java.util.UUID;
-
-import com.kaizenchandra.awseventbridgedemo.booking.application.*;
+import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import com.kaizenchandra.awseventbridgedemo.booking.application.Bookings;
 import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
 import com.kaizenchandra.awseventbridgedemo.payments.domain.PaymentStatus;
 import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
 import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
+
+import java.util.UUID;
 
 public class PaymentCallbacks {
     private final Transactions tx;

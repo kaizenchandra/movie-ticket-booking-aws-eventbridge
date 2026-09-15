@@ -1,14 +1,13 @@
 package com.kaizenchandra.awseventbridgedemo.notifications.adapter.out;
 
-import org.springframework.stereotype.Component;
-
-import java.util.*;
-import java.time.*;
-
-import tools.jackson.databind.json.JsonMapper;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
-import com.kaizenchandra.awseventbridgedemo.notifications.application.IntegrationEvent;
 import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
+import com.kaizenchandra.awseventbridgedemo.notifications.application.IntegrationEvent;
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
+import org.springframework.stereotype.Component;
+import tools.jackson.databind.json.JsonMapper;
+
+import java.time.Clock;
+import java.util.UUID;
 
 @Component
 public class Outbox implements com.kaizenchandra.awseventbridgedemo.booking.application.BookingEvents {

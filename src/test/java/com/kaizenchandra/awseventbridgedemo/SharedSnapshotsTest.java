@@ -1,16 +1,18 @@
 package com.kaizenchandra.awseventbridgedemo;
 
+import com.kaizenchandra.awseventbridgedemo.notifications.adapter.in.SharedSnapshots;
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
 import org.junit.jupiter.api.Test;
-import static org.assertj.core.api.Assertions.*;
-import static org.mockito.Mockito.*;
-import java.time.Duration;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Supplier;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 import reactor.test.StepVerifier;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
-import com.kaizenchandra.awseventbridgedemo.notifications.adapter.in.SharedSnapshots;
+
+import java.time.Duration;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Supplier;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.*;
 
 class SharedSnapshotsTest {
     @Test

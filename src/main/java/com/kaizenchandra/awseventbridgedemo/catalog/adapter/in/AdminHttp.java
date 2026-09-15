@@ -1,15 +1,16 @@
 package com.kaizenchandra.awseventbridgedemo.catalog.adapter.in;
 
-import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid;
-import jakarta.validation.constraints.*;
-
-import java.time.*;
-import java.util.*;
-
-import reactor.core.publisher.Mono;
 import com.kaizenchandra.awseventbridgedemo.catalog.application.CatalogPort;
 import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
+import jakarta.validation.Valid;
+import jakarta.validation.constraints.*;
+import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Mono;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @RestController
 @RequestMapping("/api/admin")
@@ -22,21 +23,6 @@ public class AdminHttp {
         this.scheduling = scheduling;
         this.catalog = catalog;
         this.boundary = boundary;
-    }
-
-    public record Movie(@NotBlank @Size(max = 200) String title, @Min(1) @Max(600) int durationMinutes) {
-    }
-
-    public record Cinema(@NotBlank @Size(max = 200) String name, @NotBlank @Size(max = 120) String city) {
-    }
-
-    public record Screen(@NotNull UUID cinemaId, @NotBlank @Size(max = 100) String name,
-                         @NotEmpty @Size(max = 500) List<@NotNull @Pattern(regexp = "[A-Za-z0-9-]{1,12}") String> seats) {
-    }
-
-    public record Show(@NotNull UUID movieId, @NotNull UUID screenId, @NotNull @Future Instant startsAt,
-                       @NotNull Instant endsAt, @Min(0) @Max(100000000) long priceMinor,
-                       @NotNull @Pattern(regexp = "[A-Z]{3}") String currency) {
     }
 
     @PostMapping("/movies")
@@ -89,5 +75,20 @@ public class AdminHttp {
             scheduling.deleteShow(id);
             return Map.of("deleted", id);
         });
+    }
+
+    public record Movie(@NotBlank @Size(max = 200) String title, @Min(1) @Max(600) int durationMinutes) {
+    }
+
+    public record Cinema(@NotBlank @Size(max = 200) String name, @NotBlank @Size(max = 120) String city) {
+    }
+
+    public record Screen(@NotNull UUID cinemaId, @NotBlank @Size(max = 100) String name,
+                         @NotEmpty @Size(max = 500) List<@NotNull @Pattern(regexp = "[A-Za-z0-9-]{1,12}") String> seats) {
+    }
+
+    public record Show(@NotNull UUID movieId, @NotNull UUID screenId, @NotNull @Future Instant startsAt,
+                       @NotNull Instant endsAt, @Min(0) @Max(100000000) long priceMinor,
+                       @NotNull @Pattern(regexp = "[A-Z]{3}") String currency) {
     }
 }

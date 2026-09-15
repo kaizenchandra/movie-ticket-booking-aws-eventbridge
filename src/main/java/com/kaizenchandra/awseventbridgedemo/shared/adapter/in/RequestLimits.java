@@ -1,12 +1,16 @@
 package com.kaizenchandra.awseventbridgedemo.shared.adapter.in;
 
-import org.springframework.stereotype.Component;
 import org.springframework.core.annotation.Order;
-import org.springframework.web.server.*;
-import org.springframework.http.*;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.web.server.ServerWebExchange;
+import org.springframework.web.server.WebFilter;
+import org.springframework.web.server.WebFilterChain;
 import reactor.core.publisher.Mono;
 
-import java.util.concurrent.atomic.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Per-replica admission bounds. An edge WAF supplies distributed per-client limits.
@@ -18,6 +22,13 @@ public class RequestLimits implements WebFilter {
     private final AtomicInteger live = new AtomicInteger();
     private final AtomicLong window = new AtomicLong();
     private final AtomicInteger arrivals = new AtomicInteger();
+
+    public static Mono<Void> reject(ServerWebExchange e, int status, String code) {
+        e.getResponse().setStatusCode(HttpStatusCode.valueOf(status));
+        e.getResponse().getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
+        if (status == 429 || status == 503) e.getResponse().getHeaders().set("Retry-After", "2");
+        return e.getResponse().writeWith(Mono.just(e.getResponse().bufferFactory().wrap(("{\"status\":" + status + ",\"code\":\"" + code + "\",\"title\":\"" + code + "\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+    }
 
     public Mono<Void> filter(ServerWebExchange exchange, WebFilterChain chain) {
         long now = System.currentTimeMillis() / 1000;
@@ -34,12 +45,5 @@ public class RequestLimits implements WebFilter {
             return reject(exchange, 503, "OVERLOADED");
         }
         return chain.filter(exchange).doFinally(signal -> counter.decrementAndGet());
-    }
-
-    public static Mono<Void> reject(ServerWebExchange e, int status, String code) {
-        e.getResponse().setStatusCode(HttpStatusCode.valueOf(status));
-        e.getResponse().getHeaders().setContentType(MediaType.APPLICATION_PROBLEM_JSON);
-        if(status==429 || status==503)e.getResponse().getHeaders().set("Retry-After", "2");
-        return e.getResponse().writeWith(Mono.just(e.getResponse().bufferFactory().wrap(("{\"status\":" + status + ",\"code\":\"" + code + "\",\"title\":\"" + code + "\"}").getBytes(java.nio.charset.StandardCharsets.UTF_8))));
     }
 }

@@ -1,8 +1,8 @@
 package com.kaizenchandra.awseventbridgedemo.payments.application;
 
-import java.util.UUID;
-
 import com.kaizenchandra.awseventbridgedemo.shared.domain.Money;
+
+import java.util.UUID;
 
 /**
  * Local-provider settlement control; never installed by the production profile.

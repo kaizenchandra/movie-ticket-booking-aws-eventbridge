@@ -1,24 +1,25 @@
 package com.kaizenchandra.awseventbridgedemo.shared.adapter.in;
 
-import org.springframework.stereotype.Component;
+import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import com.kaizenchandra.awseventbridgedemo.booking.application.Bookings;
+import com.kaizenchandra.awseventbridgedemo.notifications.adapter.in.NotificationConsumer;
+import com.kaizenchandra.awseventbridgedemo.notifications.adapter.out.OutboxDelivery;
+import com.kaizenchandra.awseventbridgedemo.payments.application.PaymentReconciler;
 import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.OperationalMetrics;
+import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.SmartLifecycle;
+import org.springframework.stereotype.Component;
 
-import java.util.concurrent.*;
 import java.time.Clock;
-
-import com.kaizenchandra.awseventbridgedemo.booking.application.*;
-import com.kaizenchandra.awseventbridgedemo.payments.application.PaymentReconciler;
-import com.kaizenchandra.awseventbridgedemo.notifications.adapter.out.OutboxDelivery;
-import com.kaizenchandra.awseventbridgedemo.notifications.adapter.in.NotificationConsumer;
-import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 @Component
 @ConditionalOnProperty(name = "workers.enabled", havingValue = "true", matchIfMissing = true)
 public class Workers implements SmartLifecycle {
     private final ScheduledExecutorService executor = Executors.newScheduledThreadPool(4, Thread.ofPlatform().name("worker-", 0).factory());
-    private volatile boolean running;
     private final boolean awsEnabled;
     private final OperationalMetrics metrics;
     private final Bookings bookings;
@@ -28,6 +29,7 @@ public class Workers implements SmartLifecycle {
     private final PaymentReconciler payments;
     private final OutboxDelivery outbox;
     private final NotificationConsumer consumer;
+    private volatile boolean running;
 
     public Workers(Bookings bookings, BookingStore store, Transactions tx, Clock clock, PaymentReconciler payments, OutboxDelivery outbox, NotificationConsumer consumer, OperationalMetrics metrics, @org.springframework.beans.factory.annotation.Value("${workers.aws-enabled:true}") boolean awsEnabled) {
         this.awsEnabled = awsEnabled;

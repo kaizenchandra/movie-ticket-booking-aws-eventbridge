@@ -1,9 +1,10 @@
 package com.kaizenchandra.awseventbridgedemo;
 
-import org.junit.jupiter.api.Test;
 import com.tngtech.archunit.core.importer.ClassFileImporter;
+import org.junit.jupiter.api.Test;
 
-import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.*;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.noClasses;
 
 class ArchitectureTest {
     @Test
@@ -23,9 +24,10 @@ class ArchitectureTest {
         var c = new ClassFileImporter().importPackages("com.kaizenchandra.awseventbridgedemo");
         classes().that().areAnnotatedWith(jakarta.persistence.Entity.class).should().resideInAPackage("..adapter.out..").check(c);
     }
+
     @Test
     void adaptersDoNotDependOnBootstrap() {
-        var classes=new ClassFileImporter().importPackages("com.kaizenchandra.awseventbridgedemo");
+        var classes = new ClassFileImporter().importPackages("com.kaizenchandra.awseventbridgedemo");
         noClasses().that().resideInAPackage("..adapter..").should().dependOnClassesThat().resideInAPackage("..bootstrap..").check(classes);
     }
 }

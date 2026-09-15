@@ -1,27 +1,25 @@
 package com.kaizenchandra.awseventbridgedemo.notifications.adapter.out;
 
-import org.springframework.stereotype.Component;
-
-import java.util.*;
-import java.time.*;
-
-import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
-import software.amazon.awssdk.services.eventbridge.model.*;
-import org.springframework.beans.factory.annotation.Value;
 import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
 import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
+import software.amazon.awssdk.services.eventbridge.EventBridgeClient;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsRequest;
+import software.amazon.awssdk.services.eventbridge.model.PutEventsRequestEntry;
+
+import java.time.Clock;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
 
 @Component
 public class OutboxDelivery {
-    public record Claimed(UUID id, UUID token, String payload, int attempts) {
-    }
-
     private final Sql sql;
     private final Transactions tx;
     private final EventBridgeClient events;
     private final Clock clock;
     private final String bus;
-
     public OutboxDelivery(Sql sql, Transactions tx, EventBridgeClient events, Clock clock, @Value("${aws.bus:cinema}") String bus) {
         this.sql = sql;
         this.tx = tx;
@@ -69,5 +67,8 @@ public class OutboxDelivery {
             for (var c : batch) mark(c, "PUBLISH_UNCERTAIN");
             throw e;
         }
+    }
+
+    public record Claimed(UUID id, UUID token, String payload, int attempts) {
     }
 }

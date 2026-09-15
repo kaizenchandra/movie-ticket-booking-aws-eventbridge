@@ -1,15 +1,18 @@
 package com.kaizenchandra.awseventbridgedemo;
 
+import com.kaizenchandra.awseventbridgedemo.booking.domain.Booking;
+import com.kaizenchandra.awseventbridgedemo.booking.domain.BookingStatus;
+import com.kaizenchandra.awseventbridgedemo.payments.domain.RefundStatus;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Money;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
 import org.junit.jupiter.api.Test;
 
-import java.time.*;
-import java.util.*;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
 
-import static org.assertj.core.api.Assertions.*;
-
-import com.kaizenchandra.awseventbridgedemo.booking.domain.*;
-import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
-import com.kaizenchandra.awseventbridgedemo.payments.domain.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class BookingTest {
     Instant now = Instant.parse("2026-01-01T00:00:00Z");

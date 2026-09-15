@@ -1,13 +1,12 @@
 package com.kaizenchandra.awseventbridgedemo.shared.adapter.in;
 
+import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
 import org.springframework.stereotype.Component;
 import reactor.core.publisher.Mono;
 import reactor.core.scheduler.Scheduler;
 
-import java.util.function.Supplier;
 import java.time.Duration;
-
-import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
+import java.util.function.Supplier;
 
 @Component
 public class BlockingBoundary {

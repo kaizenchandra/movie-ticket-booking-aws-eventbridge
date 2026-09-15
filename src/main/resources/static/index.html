@@ -1,6 +1,67 @@
-<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Cinema booking demo</title>
-<style>body{font:16px system-ui;max-width:850px;margin:3rem auto;padding:1rem;background:#f5f5f5}button,input,select{padding:.6rem;margin:.3rem}button{cursor:pointer}.seat{min-width:65px}.selected{background:#c4e4ff}pre{white-space:pre-wrap;overflow-wrap:anywhere}section{background:white;padding:1rem;margin:1rem 0}</style>
-<h1>Cinema</h1><p>Local demonstration. Availability refreshes every two seconds; reservations are authoritative.</p>
-<section><select id="user"><option>alice</option><option>bob</option></select><input id="password" type="password" placeholder="Local customer password"><button id="login">Sign in</button><span id="connection"></span></section>
-<section><select id="shows"></select><button id="browse">Browse shows</button><div id="seats"></div><button id="hold">Reserve selected seats</button></section>
-<section><select id="mode"><option>SUCCESS</option><option>FAILURE</option><option>DELAY</option><option>DUPLICATE</option><option>REFUND_RETRY</option></select><button id="pay">Pay</button><button id="cancel">Cancel booking</button><button id="tickets">Get tickets</button><pre id="result">Sign in to begin.</pre></section><script src="/app.js"></script></html>
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta content="width=device-width" name="viewport">
+<title>Cinema booking demo</title>
+<style>body {
+    font: 16px system-ui;
+    max-width: 850px;
+    margin: 3rem auto;
+    padding: 1rem;
+    background: #f5f5f5
+}
+
+button, input, select {
+    padding: .6rem;
+    margin: .3rem
+}
+
+button {
+    cursor: pointer
+}
+
+.seat {
+    min-width: 65px
+}
+
+.selected {
+    background: #c4e4ff
+}
+
+pre {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere
+}
+
+section {
+    background: white;
+    padding: 1rem;
+    margin: 1rem 0
+}</style>
+<h1>Cinema</h1>
+<p>Local demonstration. Availability refreshes every two seconds; reservations are authoritative.</p>
+<section><select id="user">
+    <option>alice</option>
+    <option>bob</option>
+</select><input id="password" placeholder="Local customer password" type="password">
+    <button id="login">Sign in</button>
+    <span id="connection"></span></section>
+<section><select id="shows"></select>
+    <button id="browse">Browse shows</button>
+    <div id="seats"></div>
+    <button id="hold">Reserve selected seats</button>
+</section>
+<section><select id="mode">
+    <option>SUCCESS</option>
+    <option>FAILURE</option>
+    <option>DELAY</option>
+    <option>DUPLICATE</option>
+    <option>REFUND_RETRY</option>
+</select>
+    <button id="pay">Pay</button>
+    <button id="cancel">Cancel booking</button>
+    <button id="tickets">Get tickets</button>
+    <pre id="result">Sign in to begin.</pre>
+</section>
+<script src="/app.js"></script>
+</html>

@@ -1,15 +1,15 @@
 package com.kaizenchandra.awseventbridgedemo.payments.adapter.out;
 
-import org.springframework.stereotype.Component;
-import org.springframework.context.annotation.Profile;
-
-import java.util.*;
-import java.time.*;
-
 import com.kaizenchandra.awseventbridgedemo.payments.application.PaymentProvider;
-import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
 import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
-import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
+import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Money;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
+import org.springframework.context.annotation.Profile;
+import org.springframework.stereotype.Component;
+
+import java.time.Clock;
+import java.util.UUID;
 
 @Component
 @Profile({"local", "test"})

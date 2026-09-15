@@ -11,7 +11,7 @@
   ],
   "security": [
     {
-      "bearerAuth": []
+      "bearerAuth": [ ]
     }
   ],
   "components": {
@@ -2505,7 +2505,7 @@
     "/local/token": {
       "post": {
         "summary": "Local profile only: obtain a development JWT",
-        "security": [],
+        "security": [ ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2530,7 +2530,7 @@
       "post": {
         "summary": "Local/test profile only: verified payment callback",
         "description": "HMAC-SHA256 over timestamp + dot + exact raw body. Requires an initiated payment. Rejects timestamps outside 300 seconds.",
-        "security": [],
+        "security": [ ],
         "parameters": [
           {
             "name": "X-Timestamp",

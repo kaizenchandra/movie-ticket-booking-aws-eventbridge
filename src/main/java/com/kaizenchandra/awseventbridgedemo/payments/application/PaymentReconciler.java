@@ -1,6 +1,7 @@
 package com.kaizenchandra.awseventbridgedemo.payments.application;
 
-import com.kaizenchandra.awseventbridgedemo.booking.application.*;
+import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
+import com.kaizenchandra.awseventbridgedemo.booking.application.Bookings;
 import com.kaizenchandra.awseventbridgedemo.shared.application.Transactions;
 
 public class PaymentReconciler {

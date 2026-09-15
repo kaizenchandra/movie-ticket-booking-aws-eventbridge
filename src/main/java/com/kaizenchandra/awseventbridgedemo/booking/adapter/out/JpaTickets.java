@@ -1,13 +1,13 @@
 package com.kaizenchandra.awseventbridgedemo.booking.adapter.out;
 
-import org.springframework.stereotype.Repository;
-
-import java.util.*;
-import java.time.*;
-
 import com.kaizenchandra.awseventbridgedemo.booking.application.TicketPort;
 import com.kaizenchandra.awseventbridgedemo.shared.adapter.out.Sql;
-import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
+import org.springframework.stereotype.Repository;
+
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Repository
 public class JpaTickets implements TicketPort {

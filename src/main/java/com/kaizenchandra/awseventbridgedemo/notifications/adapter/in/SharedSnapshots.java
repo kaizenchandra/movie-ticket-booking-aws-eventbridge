@@ -1,14 +1,17 @@
 package com.kaizenchandra.awseventbridgedemo.notifications.adapter.in;
 
+import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
+import org.springframework.stereotype.Component;
+import reactor.core.publisher.Flux;
+
 import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.function.Supplier;
-import org.springframework.stereotype.Component;
-import reactor.core.publisher.Flux;
-import com.kaizenchandra.awseventbridgedemo.shared.adapter.in.BlockingBoundary;
 
-/** Per-replica fanout: one in-flight read and one cached snapshot per subscribed topic. */
+/**
+ * Per-replica fanout: one in-flight read and one cached snapshot per subscribed topic.
+ */
 @Component
 public class SharedSnapshots {
     private final BlockingBoundary boundary;
@@ -34,8 +37,9 @@ public class SharedSnapshots {
     }
 
     private final class Entry {
-        int users;
         final Flux<Object> flux;
+        int users;
+
         Entry(Supplier<?> read) {
             flux = Flux.interval(Duration.ZERO, Duration.ofSeconds(2)).onBackpressureDrop()
                     .concatMap(tick -> boundary.call(() -> (Object) read.get()), 1)

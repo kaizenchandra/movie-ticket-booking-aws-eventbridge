@@ -1,11 +1,15 @@
 package com.kaizenchandra.awseventbridgedemo.booking.domain;
 
-import java.time.Instant;
-import java.util.*;
-
-import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
 import com.kaizenchandra.awseventbridgedemo.inventory.domain.HoldStatus;
-import com.kaizenchandra.awseventbridgedemo.payments.domain.*;
+import com.kaizenchandra.awseventbridgedemo.payments.domain.PaymentStatus;
+import com.kaizenchandra.awseventbridgedemo.payments.domain.RefundStatus;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Money;
+import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
+
+import java.time.Instant;
+import java.util.HashSet;
+import java.util.List;
+import java.util.UUID;
 
 public record Booking(UUID id, UUID showId, String owner, List<String> seats, Money total, Instant expiresAt,
                       BookingStatus status, HoldStatus hold, PaymentStatus payment, RefundStatus refund, long version,
