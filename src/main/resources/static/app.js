@@ -1,5 +1,5 @@
 let token,booking,liveAbort;const selected=new Set();const $=id=>document.getElementById(id);const show=x=>$('result').textContent=JSON.stringify(x,null,2);
-async function api(path,method='GET',body,key){const r=await fetch(path,{method,headers:{Authorization:'Bearer '+token,'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw data;return data;}
+async function api(path,method='GET',body,key){const r=await fetch(path,{method,headers:{...(token&&path!=='/local/token'?{Authorization:'Bearer '+token}:{}),'Content-Type':'application/json',...(key?{'Idempotency-Key':key}:{})},body:body?JSON.stringify(body):undefined});const data=await r.json();if(!r.ok)throw data;return data;}
 function handle(fn){return async()=>{try{await fn();}catch(e){show(e);}};}
 $('login').onclick=handle(async()=>{const t=await api('/local/token','POST',{username:$('user').value,password:$('password').value});token=t.access_token;$('password').value='';await browse();});
 async function browse(){const rows=await api('/api/shows');$('shows').replaceChildren(...rows.map(s=>{const o=document.createElement('option');o.value=s.id;o.textContent=s.title+' — '+s.startsAt;return o;}));if(rows.length)startLive();}

@@ -14,7 +14,14 @@ docker compose up --build -d --wait
 ./scripts/messaging-smoke.py
 ```
 
-Open http://localhost:8080. Sign in as `alice` or `bob` with the random `LOCAL_CUSTOMER_PASSWORD` from your local `.env`. `admin` uses `LOCAL_ADMIN_PASSWORD`. The local token endpoint exists only in the `local` profile; its RSA keys are generated into ignored `.local/`. It is a deterministic development identity service, not an OIDC identity provider. Production validates external OIDC JWTs and has no token minting endpoint. The browser holds tokens in memory, sends Authorization headers, and refreshes seat snapshots over authenticated fetch streaming.
+For the optional two-replica live-update check (Compose 2.24.4+):
+
+```sh
+docker compose -f compose.yaml -f compose.replica.yaml up --build -d --wait
+./scripts/replica-smoke.py
+```
+
+Open http://localhost:8080. Sign in as `alice` or `bob` with the random `LOCAL_CUSTOMER_PASSWORD` from your local `.env`. `admin` uses `LOCAL_ADMIN_PASSWORD`. The local token endpoint exists only in the `local` profile; its RSA keys are generated into ignored `.local/`. Compose runs the local container with your host UID so the generated private key can remain owner-readable only. It is a deterministic development identity service, not an OIDC identity provider. Production validates external OIDC JWTs and has no token minting endpoint. The browser holds tokens in memory, sends Authorization headers, and refreshes seat snapshots over authenticated fetch streaming.
 
 The seed show starts seven days after the first local migration. Once it has passed, create a new show through the admin API. Seed migrations are local-profile only. Do not reset production databases to refresh sample data.
 
@@ -29,7 +36,7 @@ export AWS_ENDPOINT=http://localhost:4566
 java -jar target/aws-eventbridge-demo-1.0.0-SNAPSHOT.jar
 ```
 
-Java 21 must be selected explicitly if your system defaults to another JDK. On macOS: `export JAVA_HOME=$(/usr/libexec/java_home -v 21)`. Maven Wrapper 3.9.16 is retained from the supplied starter. `./mvnw dependency:tree` gives the resolved Boot-managed dependency versions. `docs/verification.md` records exactly which checks were executed.
+Java 21 must be selected explicitly if your system defaults to another JDK. On macOS: `export JAVA_HOME=$(/usr/libexec/java_home -v 21)`. Maven Wrapper 3.9.16 is retained from the supplied starter. `./mvnw dependency:tree` gives the resolved Boot-managed dependency versions. [The verification report](docs/verification.md) records the 37 passing tests, smoke checks, measured container load and explicit unverified integrations.
 
 For database/HTTP-only diagnosis without an AWS emulator, set `WORKERS_AWS_ENABLED=false` when running the host JVM. Payments, refunds, expiry, and snapshots still run; outbox records accumulate. This is an explicit degraded test mode, not a replacement for the required EventBridge/SQS path. Full AWS verification requires the licensed LocalStack service.
 
@@ -59,9 +66,9 @@ See [architecture and state machines](docs/architecture.md), [decisions](docs/ad
 
 Package modules: `catalog`, `scheduling`, `inventory`, `booking`, `payments`, `notifications`; each owns appropriate domain/application/adapter code. `shared` contains money/errors and the transaction port; `bootstrap` wires infrastructure and runtime boundaries. The build stays one Maven artifact, so the architecture tests enforce inward dependency direction. Scheduling, inventory, and ticket query ports have distinct persistence adapters. The booking persistence adapter owns coordinated booking/seat writes because those invariants must commit atomically. PostgreSQL foreign keys intentionally cross module schemas in this monolith.
 
-A show-row database lock serializes reservations, expiry, settlement, and cancellation for a show. Different shows proceed independently. This makes multi-seat atomicity and races auditable but limits a hot show's throughput. JPA is blocking: eight bounded scheduler threads handle complete transactions, with 16 queued tasks per backing thread; four sequential worker loops share a 16-connection pool. Transactions have five-second bounds, database lock waits two seconds, connection acquisition two seconds, and HTTP use cases eight seconds. A timed-out HTTP request may have committed; retry the same key. Limits are per replica and require a fleet-wide database connection budget.
+Reservations use shared show-metadata locks, ordered booking-row locks for existing owners, and ordered seat-row locks. Disjoint seats in a show proceed concurrently; settlement and cancellation serialize only on their booking. Multi-seat changes still commit atomically. JPA remains blocking as required: configurable `BOOKING_DATABASE_WORKERS` (default 8) execute whole transactions off Netty, with a single bounded FIFO queue (`BOOKING_DATABASE_QUEUE`, default 64). Startup rejects worker counts that leave fewer than four connections for background work in the Hikari pool. Saturation returns 503. Transactions have five-second bounds, lock waits two seconds, connection acquisition two seconds, and HTTP use cases eight seconds. A timed-out HTTP request may have committed; retry the same key. Limits are per replica and require a fleet-wide database connection budget.
 
-Full snapshots every two seconds provide cross-replica SSE consistency without extra broadcast infrastructure. They are advisory and may skip intermediate transitions. Each snapshot carries a heartbeat, reconnect delay and opaque ID; Last-Event-ID always causes a fresh snapshot. The booking stream covers the first 100 bookings; use paginated history for all records. Connections close by JWT expiry or five minutes, with a one-snapshot buffer and 100-stream admission cap per replica. This polling design increases database reads with connected clients.
+SSE uses one shared snapshot query every two seconds per subscribed show or user **per replica**, independent of the number of clients watching that topic. Each replica reads committed PostgreSQL state, so updates reach all replicas without treating competing SQS consumers as broadcast. A newly connected client receives the cached snapshot immediately (normally at most two seconds old) and subsequent refreshed snapshots; reconnect IDs are advisory, not durable cursors. Cache entries and polling stop when their last subscriber disconnects. The booking stream covers the first 100 bookings; use paginated history for all records. Connections close by JWT expiry or five minutes, with a latest-only buffer and 100-stream admission cap per replica. Availability remains advisory; reservations recheck the database.
 
 Policy assumptions: UTC instants; one currency and uniform price per show; full cancellation refund strictly before showtime; no fees, discounts, split tenders, tax calculation, or ticket transfer. Held or confirmed seats are released on cancellation. Historical bookings prevent show deletion; sold showtimes and seat layouts are immutable. Edit unused showtimes by delete/recreate. A production box-office admission/check-in service is outside this backend's scope; returned ticket IDs and revocation flags demonstrate ticket generation.
 
@@ -74,6 +81,7 @@ Policy assumptions: UTC instants; one currency and uniform price per show; full 
 | `AWS_REGION`, `AWS_ENDPOINT`, `AWS_BUS`, `AWS_QUEUE_URL` | Real AWS or local emulator routing |
 | `WORKERS_ENABLED`, `WORKERS_AWS_ENABLED` | Worker lifecycle and explicit AWS-only diagnostic switch |
 | `OIDC_ISSUER`, `OIDC_JWK_SET_URI`, `OIDC_AUDIENCE` | Production RS256 signature, issuer, expiry and audience validation |
+| `OTEL_TRACING_EXPORT_ENABLED`, `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | Enable OTLP trace export and choose collector |
 | `CORS_ORIGIN` | Exact permitted browser origin |
 | `PAYMENT_CALLBACK_SECRET` | Local simulator HMAC callback verification |
 | `LOCAL_KEYS`, `LOCAL_CUSTOMER_PASSWORD`, `LOCAL_ADMIN_PASSWORD` | Local-only identity setup |

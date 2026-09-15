@@ -126,7 +126,8 @@ class CinemaIT {
     NotificationConsumer consumer;
     @MockitoBean
     EventBridgeClient events;
-    @MockitoBean software.amazon.awssdk.services.sqs.SqsClient sqs;
+    @MockitoBean
+    software.amazon.awssdk.services.sqs.SqsClient sqs;
     @LocalServerPort
     int port;
     WebTestClient web;
@@ -181,6 +182,38 @@ class CinemaIT {
         reconciler.run();
         assertThat(tx.execute(() -> store.get(b.id())).refund()).isEqualTo(RefundStatus.SUCCEEDED);
         assertThat(tx.execute(() -> tickets.tickets(b.id()))).allMatch(t -> Boolean.TRUE.equals(t.get("revoked")));
+    }
+
+    @Test
+    void disjointSeatsProceedWhileAnotherReservationHasNotCommitted() throws Exception {
+        var locked = new CountDownLatch(1);
+        var release = new CountDownLatch(1);
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var first = executor.submit(() -> tx.execute(() -> {
+                var b = bookings.reserve("alice", "independent-one", show, List.of("A1"));
+                locked.countDown();
+                try {
+                    if (!release.await(4, TimeUnit.SECONDS)) throw new IllegalStateException("test timeout");
+                } catch (InterruptedException e) { throw new RuntimeException(e); }
+                return b;
+            }));
+            try {
+                assertThat(locked.await(2, TimeUnit.SECONDS)).isTrue();
+                var second = executor.submit(() -> hold("independent-two", "A2"));
+                assertThat(second.get(1, TimeUnit.SECONDS).seats()).containsExactly("A2");
+            } finally { release.countDown(); }
+            assertThat(first.get(2, TimeUnit.SECONDS).seats()).containsExactly("A1");
+        }
+    }
+
+    @Test
+    void overlappingExpiredMultiSeatOwnersAreReclaimedWithoutDeadlock() throws Exception {
+        hold("expired-pair-one", "A1", "A2");
+        hold("expired-pair-two", "A3", "A4");
+        time.now = time.now.plusSeconds(301);
+        var results = race(2, i -> i == 0 ? hold("reclaim-pair-one", "A1", "A3") : hold("reclaim-pair-two", "A2", "A4"));
+        assertThat(results).allMatch(Booking.class::isInstance);
+        assertThat(tx.execute(() -> sql.query("SELECT count(*) FROM show_seat WHERE booking_id IS NOT NULL").getSingleResult()).toString()).isEqualTo("4");
     }
 
     @Test
@@ -351,68 +384,96 @@ class CinemaIT {
 
     @Test
     void consumerAcknowledgesOnlyCommittedValidMessages() {
-        var b=hold("sqs-ack-test","A1");
-        String payload=tx.execute(()->(String)sql.query("SELECT payload FROM outbox WHERE aggregate_id=?1",b.id()).getSingleResult());
+        var b = hold("sqs-ack-test", "A1");
+        String payload = tx.execute(() -> (String) sql.query("SELECT payload FROM outbox WHERE aggregate_id=?1", b.id()).getSingleResult());
         when(sqs.receiveMessage(any(software.amazon.awssdk.services.sqs.model.ReceiveMessageRequest.class))).thenReturn(
-            software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse.builder().messages(
-                software.amazon.awssdk.services.sqs.model.Message.builder().messageId("good").receiptHandle("good-receipt").body(envelope(payload)).build(),
-                software.amazon.awssdk.services.sqs.model.Message.builder().messageId("bad").receiptHandle("bad-receipt").body("{}").build()).build());
+                software.amazon.awssdk.services.sqs.model.ReceiveMessageResponse.builder().messages(
+                        software.amazon.awssdk.services.sqs.model.Message.builder().messageId("good").receiptHandle("good-receipt").body(envelope(payload)).build(),
+                        software.amazon.awssdk.services.sqs.model.Message.builder().messageId("bad").receiptHandle("bad-receipt").body("{}").build()).build());
         consumer.poll();
-        verify(sqs,times(1)).deleteMessage(org.mockito.ArgumentMatchers.<java.util.function.Consumer<software.amazon.awssdk.services.sqs.model.DeleteMessageRequest.Builder>>any());
-        verify(sqs,times(1)).changeMessageVisibility(org.mockito.ArgumentMatchers.<java.util.function.Consumer<software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityRequest.Builder>>any());
-        assertThat(tx.execute(()->sql.query("SELECT count(*) FROM consumer_receipt").getSingleResult()).toString()).isEqualTo("1");
+        verify(sqs, times(1)).deleteMessage(org.mockito.ArgumentMatchers.<java.util.function.Consumer<software.amazon.awssdk.services.sqs.model.DeleteMessageRequest.Builder>>any());
+        verify(sqs, times(1)).changeMessageVisibility(org.mockito.ArgumentMatchers.<java.util.function.Consumer<software.amazon.awssdk.services.sqs.model.ChangeMessageVisibilityRequest.Builder>>any());
+        assertThat(tx.execute(() -> sql.query("SELECT count(*) FROM consumer_receipt").getSingleResult()).toString()).isEqualTo("1");
     }
 
     @Test
     void mixedEventBridgeResultsOnlyMarkSuccessfulEntry() {
-        hold("mixed-outbox-1","A1");hold("mixed-outbox-2","A2");
+        hold("mixed-outbox-1", "A1");
+        hold("mixed-outbox-2", "A2");
         when(events.putEvents(any(PutEventsRequest.class))).thenReturn(PutEventsResponse.builder().failedEntryCount(1).entries(
-            PutEventsResultEntry.builder().eventId("success").build(),PutEventsResultEntry.builder().errorCode("ThrottlingException").build()).build());
+                PutEventsResultEntry.builder().eventId("success").build(), PutEventsResultEntry.builder().errorCode("ThrottlingException").build()).build());
         outbox.publish();
-        assertThat(tx.execute(()->sql.query("SELECT count(*) FROM outbox WHERE delivered_at IS NOT NULL").getSingleResult()).toString()).isEqualTo("1");
-        assertThat(tx.execute(()->sql.query("SELECT count(*) FROM outbox WHERE delivered_at IS NULL").getSingleResult()).toString()).isEqualTo("1");
+        assertThat(tx.execute(() -> sql.query("SELECT count(*) FROM outbox WHERE delivered_at IS NOT NULL").getSingleResult()).toString()).isEqualTo("1");
+        assertThat(tx.execute(() -> sql.query("SELECT count(*) FROM outbox WHERE delivered_at IS NULL").getSingleResult()).toString()).isEqualTo("1");
     }
 
     @Test
     void callbackSignatureRejectsForgeryAndDuplicateDoesNotIssueExtraTicket() throws Exception {
-        var b=hold("callback-test","A1");tx.execute(()->bookings.pay("alice",b.id(),"SUCCESS"));
-        String body="{\"bookingId\":\""+b.id()+"\",\"success\":true}";
-        long timestamp=time.instant().getEpochSecond();
-        web.post().uri("/api/simulator/callback").header("X-Timestamp",Long.toString(timestamp)).header("X-Signature","00").header("Content-Type","application/json").bodyValue(body).exchange().expectStatus().isBadRequest();
-        var mac=javax.crypto.Mac.getInstance("HmacSHA256");mac.init(new javax.crypto.spec.SecretKeySpec("test-callback-secret".getBytes(java.nio.charset.StandardCharsets.UTF_8),"HmacSHA256"));
-        String signature=HexFormat.of().formatHex(mac.doFinal((timestamp+"."+body).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
-        for(int i=0;i<2;i++)web.post().uri("/api/simulator/callback").header("X-Timestamp",Long.toString(timestamp)).header("X-Signature",signature).header("Content-Type","application/json").bodyValue(body).exchange().expectStatus().isOk();
-        assertThat(tx.execute(()->tickets.tickets(b.id()))).hasSize(1);
+        var b = hold("callback-test", "A1");
+        tx.execute(() -> bookings.pay("alice", b.id(), "SUCCESS"));
+        String body = "{\"bookingId\":\"" + b.id() + "\",\"success\":true}";
+        long timestamp = time.instant().getEpochSecond();
+        web.post().uri("/api/simulator/callback").header("X-Timestamp", Long.toString(timestamp)).header("X-Signature", "00").header("Content-Type", "application/json").bodyValue(body).exchange().expectStatus().isBadRequest();
+        var mac = javax.crypto.Mac.getInstance("HmacSHA256");
+        mac.init(new javax.crypto.spec.SecretKeySpec("test-callback-secret".getBytes(java.nio.charset.StandardCharsets.UTF_8), "HmacSHA256"));
+        String signature = HexFormat.of().formatHex(mac.doFinal((timestamp + "." + body).getBytes(java.nio.charset.StandardCharsets.UTF_8)));
+        for (int i = 0; i < 2; i++)
+            web.post().uri("/api/simulator/callback").header("X-Timestamp", Long.toString(timestamp)).header("X-Signature", signature).header("Content-Type", "application/json").bodyValue(body).exchange().expectStatus().isOk();
+        assertThat(tx.execute(() -> tickets.tickets(b.id()))).hasSize(1);
+        tx.execute(() -> bookings.cancel("alice", b.id()));
+        reconciler.run();
+        assertThat(tx.execute(() -> store.get(b.id())).refund()).isEqualTo(RefundStatus.SUCCEEDED);
     }
 
     @Test
     void failedMessageRollsBackDeduplicationReceipt() {
-        var b=hold("rollback-event","A1");
-        String payload=tx.execute(()->(String)sql.query("SELECT payload FROM outbox WHERE aggregate_id=?1",b.id()).getSingleResult());
-        String missingAggregate=payload.replace(b.id().toString(),UUID.randomUUID().toString());
-        assertThatThrownBy(()->consumer.accept(envelope(missingAggregate)));
-        assertThat(tx.execute(()->sql.query("SELECT count(*) FROM consumer_receipt").getSingleResult()).toString()).isEqualTo("0");
+        var b = hold("rollback-event", "A1");
+        String payload = tx.execute(() -> (String) sql.query("SELECT payload FROM outbox WHERE aggregate_id=?1", b.id()).getSingleResult());
+        String missingAggregate = payload.replace(b.id().toString(), UUID.randomUUID().toString());
+        assertThatThrownBy(() -> consumer.accept(envelope(missingAggregate)));
+        assertThat(tx.execute(() -> sql.query("SELECT count(*) FROM consumer_receipt").getSingleResult()).toString()).isEqualTo("0");
     }
 
     @Test
     void traceContextIsPersistedForAsynchronousDelivery() {
-        String traceId="11111111111111111111111111111111";
-        var context=io.opentelemetry.api.trace.SpanContext.create(traceId,"2222222222222222",io.opentelemetry.api.trace.TraceFlags.getSampled(),io.opentelemetry.api.trace.TraceState.getDefault());
+        String traceId = "11111111111111111111111111111111";
+        var context = io.opentelemetry.api.trace.SpanContext.create(traceId, "2222222222222222", io.opentelemetry.api.trace.TraceFlags.getSampled(), io.opentelemetry.api.trace.TraceState.getDefault());
         Booking b;
-        try(var scope=io.opentelemetry.api.trace.Span.wrap(context).makeCurrent()) {b=hold("traced-booking","A1");}
-        String payload=tx.execute(()->(String)sql.query("SELECT payload FROM outbox WHERE aggregate_id=?1",b.id()).getSingleResult());
-        assertThat(payload).contains(traceId);consumer.accept(envelope(payload));
-        web.get().uri("/api/notifications").headers(h->h.setBearerAuth(token("alice"))).exchange().expectStatus().isOk().expectBody().jsonPath("$.length()").isEqualTo(1);
-        web.get().uri("/api/notifications").headers(h->h.setBearerAuth(token("bob"))).exchange().expectStatus().isOk().expectBody().jsonPath("$.length()").isEqualTo(0);
+        try (var scope = io.opentelemetry.api.trace.Span.wrap(context).makeCurrent()) {
+            b = hold("traced-booking", "A1");
+        }
+        String payload = tx.execute(() -> (String) sql.query("SELECT payload FROM outbox WHERE aggregate_id=?1", b.id()).getSingleResult());
+        assertThat(payload).contains(traceId);
+        consumer.accept(envelope(payload));
+        web.get().uri("/api/notifications").headers(h -> h.setBearerAuth(token("alice"))).exchange().expectStatus().isOk().expectBody().jsonPath("$.length()").isEqualTo(1);
+        web.get().uri("/api/notifications").headers(h -> h.setBearerAuth(token("bob"))).exchange().expectStatus().isOk().expectBody().jsonPath("$.length()").isEqualTo(0);
     }
 
     @Test
     void simulatorFailureReleasesAndDuplicateSuccessKeepsOneCharge() {
-        var failure=hold("provider-failure","A1");tx.execute(()->bookings.pay("alice",failure.id(),"FAILURE"));reconciler.run();
-        assertThat(tx.execute(()->store.get(failure.id())).status()).isEqualTo(BookingStatus.FAILED);
-        var duplicate=hold("provider-duplicate","A1");tx.execute(()->bookings.pay("alice",duplicate.id(),"DUPLICATE"));reconciler.run();reconciler.run();
-        assertThat(tx.execute(()->tickets.tickets(duplicate.id()))).hasSize(1);
-        assertThat(tx.execute(()->sql.query("SELECT count(*) FROM simulated_charge WHERE id=?1",duplicate.id()).getSingleResult()).toString()).isEqualTo("1");
+        var failure = hold("provider-failure", "A1");
+        tx.execute(() -> bookings.pay("alice", failure.id(), "FAILURE"));
+        reconciler.run();
+        assertThat(tx.execute(() -> store.get(failure.id())).status()).isEqualTo(BookingStatus.FAILED);
+        var duplicate = hold("provider-duplicate", "A1");
+        tx.execute(() -> bookings.pay("alice", duplicate.id(), "DUPLICATE"));
+        reconciler.run();
+        reconciler.run();
+        assertThat(tx.execute(() -> tickets.tickets(duplicate.id()))).hasSize(1);
+        assertThat(tx.execute(() -> sql.query("SELECT count(*) FROM simulated_charge WHERE id=?1", duplicate.id()).getSingleResult()).toString()).isEqualTo("1");
+    }
+
+    @Test
+    void chunkedBodyCannotBypassRequestSizeLimit() {
+        String payload = "{\"showId\":\"" + show + "\",\"seats\":[\"A1\"],\"padding\":\"" + "x".repeat(70000) + "\"}";
+        var buffer = new org.springframework.core.io.buffer.DefaultDataBufferFactory().wrap(payload.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        web.post().uri("/api/bookings").headers(h -> {
+                    h.setBearerAuth(token("alice"));
+                    h.set("Idempotency-Key", "oversized-chunked");
+                })
+                .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                .body(reactor.core.publisher.Flux.just(buffer), org.springframework.core.io.buffer.DataBuffer.class)
+                .exchange().expectStatus().isEqualTo(413).expectBody().jsonPath("$.code").isEqualTo("REQUEST_TOO_LARGE");
     }
 
     List<Object> race(int count, java.util.function.IntFunction<Object> work) throws Exception {

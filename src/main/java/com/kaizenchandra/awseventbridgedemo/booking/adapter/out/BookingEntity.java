@@ -21,6 +21,8 @@ public class BookingEntity {
     public long priceMinor;
     public String currency;
     public Instant expiresAt;
+    @Column(insertable = false, updatable = false)
+    public Instant createdAt;
     @Enumerated(EnumType.STRING)
     public BookingStatus status;
     @Enumerated(EnumType.STRING)

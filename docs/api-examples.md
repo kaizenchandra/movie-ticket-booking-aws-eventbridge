@@ -33,4 +33,4 @@ request=urllib.request.Request('http://localhost:8080/api/simulator/callback',da
 print(urllib.request.urlopen(request).status)
 ```
 
-Callbacks only apply to an initiated payment. This endpoint is isolated to local/test profiles. It does not represent a production provider's signature contract. Repeated verified callbacks use the same terminal state guards as reconciliation; the provider's fixed booking idempotency key prevents duplicate charges. Never assume a generic HMAC endpoint is sufficient for a real provider integration.
+Callbacks only apply to an initiated payment. The simulator first records the provider settlement independently and then applies the booking transition, so callback-driven payments remain refundable even before the regular charge worker has run. This endpoint is isolated to local/test profiles. It does not represent a production provider's signature contract. Repeated verified callbacks use the same terminal state guards as reconciliation; the provider's fixed booking idempotency key prevents duplicate charges. Never assume a generic HMAC endpoint is sufficient for a real provider integration.

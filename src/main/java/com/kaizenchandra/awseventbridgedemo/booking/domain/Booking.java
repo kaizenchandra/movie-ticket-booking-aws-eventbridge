@@ -68,4 +68,8 @@ public record Booking(UUID id, UUID showId, String owner, List<String> seats, Mo
     public boolean ownsSeats() {
         return hold == HoldStatus.ACTIVE || hold == HoldStatus.CONSUMED;
     }
+
+    public BookingChanged changedAt(Instant occurredAt) {
+        return new BookingChanged(id, showId, version, status, occurredAt);
+    }
 }

@@ -4,4 +4,4 @@ Accepted. Catalog, scheduling, inventory, booking, payments and notifications sh
 
 WebFlux is retained for the required HTTP/SSE transport. JPA is retained for imperative persistence. Complete transactions run on eight bounded threads rather than Netty event loops. This limits throughput to database capacity and avoids pretending JPA is reactive.
 
-Show-level locking is chosen over fine-grained seat locking because cancellation, expiry and settlement act on the same aggregate. It serializes a hot show but makes lock order and atomic multi-seat reservations straightforward. Optimize only after measuring representative hot-show contention; a later per-seat scheme must sort all seat locks and preserve booking race serialization.
+The initial show-wide exclusive lock is superseded by ADR 003. Shared show metadata protection, booking-row serialization and sorted seat locks preserve race safety while allowing disjoint reservations within a show.

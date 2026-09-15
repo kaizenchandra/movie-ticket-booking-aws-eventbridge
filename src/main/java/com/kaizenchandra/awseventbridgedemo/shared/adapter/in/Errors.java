@@ -7,10 +7,13 @@ import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
 @RestControllerAdvice
 public class Errors {
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ProblemDetail> error(Exception e) {
+    public ResponseEntity<ApiProblem> error(Exception e) {
         String code;
         int status;
-        if (e instanceof Problem p) {
+        if (bodyTooLarge(e)) {
+            code = "REQUEST_TOO_LARGE";
+            status = 413;
+        } else if (e instanceof Problem p) {
             code = p.code;
             status = code.equals("NOT_FOUND") ? 404 : code.startsWith("INVALID") ? 400 : 409;
         } else if (e instanceof java.util.concurrent.TimeoutException || e instanceof java.util.concurrent.RejectedExecutionException) {
@@ -30,9 +33,17 @@ public class Errors {
             status = 500;
             org.slf4j.LoggerFactory.getLogger(Errors.class).error("request failed: {}", e.getClass().getSimpleName());
         }
-        var p = ProblemDetail.forStatusAndDetail(HttpStatusCode.valueOf(status), code);
-        p.setTitle(code);
-        p.setProperty("code", code);
-        return ResponseEntity.status(status).body(p);
+        var problem = new ApiProblem("urn:cinema:problem:" + code.toLowerCase(java.util.Locale.ROOT), code, status, code, code);
+        return ResponseEntity.status(status).contentType(MediaType.APPLICATION_PROBLEM_JSON).body(problem);
+    }
+
+    private boolean bodyTooLarge(Throwable error) {
+        for (Throwable current = error; current != null; current = current.getCause()) {
+            if (current instanceof org.springframework.core.io.buffer.DataBufferLimitException) return true;
+        }
+        return false;
+    }
+
+    public record ApiProblem(String type, String title, int status, String detail, String code) {
     }
 }

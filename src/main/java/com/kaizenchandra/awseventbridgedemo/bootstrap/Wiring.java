@@ -18,9 +18,17 @@ public class Wiring {
     }
 
     @Bean(destroyMethod = "dispose")
-    public Scheduler databaseScheduler() {
+    public Scheduler databaseScheduler(
+            @Value("${booking.database-workers:8}") int workers,
+            @Value("${booking.database-queue:64}") int queue,
+            @Value("${spring.datasource.hikari.maximum-pool-size:16}") int connections) {
+        if (workers < 1 || queue < 1 || workers + 4 > connections)
+            throw new IllegalArgumentException("Database workers must leave at least four pool connections for background work");
         reactor.core.publisher.Hooks.enableAutomaticContextPropagation();
-        return Schedulers.newBoundedElastic(8, 16, "jpa", 60);
+        var executor = new java.util.concurrent.ThreadPoolExecutor(workers, workers, 0,
+                java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<>(queue),
+                Thread.ofPlatform().name("jpa-", 0).factory(), new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
+        return Schedulers.fromExecutorService(executor, "jpa");
     }
 
     @Bean
@@ -36,5 +44,11 @@ public class Wiring {
     @Bean
     public tools.jackson.databind.json.JsonMapper jsonMapper() {
         return tools.jackson.databind.json.JsonMapper.builder().findAndAddModules().build();
+    }
+
+    @Bean
+    @Profile({"local", "test"})
+    public PaymentCallbacks paymentCallbacks(Transactions tx, BookingStore store, Bookings bookings, SimulatorControl simulator) {
+        return new PaymentCallbacks(tx, store, bookings, simulator);
     }
 }

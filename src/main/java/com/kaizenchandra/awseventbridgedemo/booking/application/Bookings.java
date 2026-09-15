@@ -28,7 +28,12 @@ public class Bookings {
             return previous.get();
         }
         var s = store.lockShow(show);
-        expireLocked(show);
+        // Lock existing owners before inventory. Never acquire another booking lock after seat locks.
+        for (UUID ownerId : store.seatOwners(show, seats)) {
+            var existing = store.lockBooking(ownerId);
+            save(existing, existing.expire(clock.instant()));
+        }
+        store.lockSeats(show, seats);
         Problem.require(clock.instant().isBefore(s.startsAt()), "SHOW_STARTED");
         Booking b = Booking.hold(UUID.randomUUID(), show, owner, seats, s.price(), clock.instant().plus(ttl));
         Problem.require(store.seatsExist(show, seats), "INVALID_SEATS");
@@ -46,36 +51,29 @@ public class Bookings {
     public Booking pay(String owner, UUID id, String mode) {
         Problem.require(Set.of("SUCCESS", "FAILURE", "DELAY", "DUPLICATE", "REFUND_RETRY").contains(mode), "INVALID_PAYMENT_MODE");
         var initial = get(owner, id);
-        store.lockShow(initial.showId());
-        var b = get(owner, id);
+        var b = store.lockBooking(id);
         return save(b, b.initiate(clock.instant(), mode));
     }
 
     public Booking cancel(String owner, UUID id) {
         var initial = get(owner, id);
         var show = store.lockShow(initial.showId());
-        var b = get(owner, id);
+        var b = store.lockBooking(id);
         return save(b, b.cancel(clock.instant(), show.startsAt()));
     }
 
     public Booking outcome(UUID id, boolean success) {
-        var initial = store.get(id);
-        store.lockShow(initial.showId());
-        var b = store.get(id);
+        var b = store.lockBooking(id);
         return save(b, b.outcome(success, clock.instant()));
     }
 
     public Booking uncertain(UUID id) {
-        var initial = store.get(id);
-        store.lockShow(initial.showId());
-        var b = store.get(id);
+        var b = store.lockBooking(id);
         return save(b, b.uncertain());
     }
 
     public Booking refunded(UUID id) {
-        var initial = store.get(id);
-        store.lockShow(initial.showId());
-        var b = store.get(id);
+        var b = store.lockBooking(id);
         return save(b, b.refunded());
     }
 
@@ -85,7 +83,10 @@ public class Bookings {
     }
 
     private void expireLocked(UUID id) {
-        for (var b : store.active(id)) save(b, b.expire(clock.instant()));
+        for (var candidate : store.active(id).stream().sorted(java.util.Comparator.comparing(b -> b.id().toString())).toList()) {
+            var b = store.lockBooking(candidate.id());
+            save(b, b.expire(clock.instant()));
+        }
     }
 
     private Booking save(Booking a, Booking b) {

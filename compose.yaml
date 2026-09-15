@@ -24,12 +24,13 @@ services:
       - ./infra/local/init-aws.py:/etc/localstack/init/ready.d/init-aws.py:ro
       - localstack-data:/var/lib/localstack
     healthcheck:
-      test: ["CMD-SHELL", "awslocal events describe-event-bus --name cinema && awslocal sqs get-queue-url --queue-name cinema-notifications"]
+      test: ["CMD-SHELL", "awslocal events list-targets-by-rule --event-bus-name cinema --rule booking-notifications --query 'length(Targets)' --output text | grep -qx 1"]
       interval: 5s
       timeout: 5s
       retries: 40
   app:
     build: .
+    user: "${LOCAL_UID:?Run scripts/local-setup.sh}:${LOCAL_GID:?Run scripts/local-setup.sh}"
     environment:
       SPRING_PROFILES_ACTIVE: local
       DB_URL: jdbc:postgresql://postgres:5432/cinema

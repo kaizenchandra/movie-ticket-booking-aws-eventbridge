@@ -28,12 +28,26 @@ public class JpaBookingStore implements BookingStore {
     }
 
     public Show lockShow(UUID id) {
-        var rows = sql.rows("SELECT id,movie_id,screen_id,starts_at,ends_at,price_minor,currency FROM showtime WHERE id=?1 FOR UPDATE", id);
+        var rows = sql.rows("SELECT id,movie_id,screen_id,starts_at,ends_at,price_minor,currency FROM showtime WHERE id=?1 FOR SHARE", id);
         Problem.require(!rows.isEmpty(), "NOT_FOUND");
         var r = rows.getFirst();
-        // Clear previously loaded entities after waiting for the show lock: READ COMMITTED must see the winning transaction.
+        // Reload after waiting; show metadata is protected against administration, not other bookings.
         sql.em().clear();
         return new Show(Sql.uuid(r[0]), Sql.uuid(r[1]), Sql.uuid(r[2]), Sql.instant(r[3]), Sql.instant(r[4]), new Money(((Number) r[5]).longValue(), (String) r[6]));
+    }
+
+    public Booking lockBooking(UUID id) {
+        Problem.require(!sql.rows("SELECT id FROM booking WHERE id=?1 FOR UPDATE", id).isEmpty(), "NOT_FOUND");
+        sql.em().clear();
+        return get(id);
+    }
+
+    public List<UUID> seatOwners(UUID show, List<String> seats) {
+        return ids("SELECT DISTINCT booking_id FROM show_seat WHERE show_id=?1 AND label IN (?2) AND booking_id IS NOT NULL ORDER BY booking_id", show, seats);
+    }
+
+    public void lockSeats(UUID show, List<String> seats) {
+        sql.rows("SELECT label FROM show_seat WHERE show_id=?1 AND label IN (?2) ORDER BY label FOR UPDATE", show, seats);
     }
 
     public Booking get(UUID id) {
@@ -41,7 +55,7 @@ public class JpaBookingStore implements BookingStore {
     }
 
     public List<Booking> active(UUID show) {
-        return sql.em().createQuery("from BookingEntity where showId=:show and hold='ACTIVE'", BookingEntity.class).setParameter("show", show).getResultList().stream().map(BookingEntity::domain).toList();
+        return sql.em().createQuery("from BookingEntity where showId=:show and hold='ACTIVE' and expiresAt<=:now", BookingEntity.class).setParameter("show", show).setParameter("now", clock.instant()).getResultList().stream().map(BookingEntity::domain).toList();
     }
 
     public void lockKey(String owner, String key) {
@@ -111,6 +125,6 @@ public class JpaBookingStore implements BookingStore {
     }
 
     public List<Booking> history(String owner, int page, int size) {
-        return sql.em().createQuery("from BookingEntity where owner=:owner order by id", BookingEntity.class).setParameter("owner", owner).setFirstResult(page * size).setMaxResults(size).getResultList().stream().map(BookingEntity::domain).toList();
+        return sql.em().createQuery("from BookingEntity where owner=:owner order by createdAt desc, id", BookingEntity.class).setParameter("owner", owner).setFirstResult(page * size).setMaxResults(size).getResultList().stream().map(BookingEntity::domain).toList();
     }
 }

@@ -13,7 +13,7 @@ import com.kaizenchandra.awseventbridgedemo.shared.domain.*;
 
 @Component
 @Profile({"local", "test"})
-public class LocalPaymentSimulator implements PaymentProvider {
+public class LocalPaymentSimulator implements PaymentProvider, com.kaizenchandra.awseventbridgedemo.payments.application.SimulatorControl {
     private final Transactions tx;
     private final Sql sql;
     private final Clock clock;
@@ -33,10 +33,24 @@ public class LocalPaymentSimulator implements PaymentProvider {
         outsideTransaction();
         return tx.execute(() -> {
             sql.update("INSERT INTO simulated_charge(id,price_minor,currency,scenario,ready_at) VALUES(?1,?2,?3,?4,?5) ON CONFLICT DO NOTHING", id, amount.minor(), amount.currency(), scenario, clock.instant().plusSeconds(scenario.equals("DELAY") ? 360 : 0));
-            var r = sql.rows("SELECT price_minor,currency,scenario,ready_at FROM simulated_charge WHERE id=?1", id).getFirst();
+            var r = sql.rows("SELECT price_minor,currency,scenario,ready_at,outcome_override FROM simulated_charge WHERE id=?1", id).getFirst();
             Problem.require(((Number) r[0]).longValue() == amount.minor() && r[1].equals(amount.currency()) && r[2].equals(scenario), "PROVIDER_KEY_CONFLICT");
+            if (r[4] != null) return Outcome.valueOf((String) r[4]);
             if (clock.instant().isBefore(Sql.instant(r[3]))) return Outcome.UNKNOWN;
             return scenario.equals("FAILURE") ? Outcome.FAILURE : Outcome.SUCCESS;
+        });
+    }
+
+    public boolean settle(UUID id, Money amount, String scenario, boolean success) {
+        outsideTransaction();
+        return tx.execute(() -> {
+            sql.update("INSERT INTO simulated_charge(id,price_minor,currency,scenario,ready_at,outcome_override) VALUES(?1,?2,?3,?4,?5,?6) ON CONFLICT DO NOTHING", id, amount.minor(), amount.currency(), scenario, clock.instant(), success ? "SUCCESS" : "FAILURE");
+            var row = sql.rows("SELECT price_minor,currency,scenario,ready_at,outcome_override FROM simulated_charge WHERE id=?1 FOR UPDATE", id).getFirst();
+            Problem.require(((Number) row[0]).longValue() == amount.minor() && row[1].equals(amount.currency()) && row[2].equals(scenario), "PROVIDER_KEY_CONFLICT");
+            boolean alreadySucceeded = "SUCCESS".equals(row[4]) || (row[4] == null && !row[2].equals("FAILURE") && !clock.instant().isBefore(Sql.instant(row[3])));
+            boolean effective = success || alreadySucceeded;
+            sql.update("UPDATE simulated_charge SET outcome_override=?2,ready_at=?3 WHERE id=?1", id, effective ? "SUCCESS" : "FAILURE", clock.instant());
+            return effective;
         });
     }
 

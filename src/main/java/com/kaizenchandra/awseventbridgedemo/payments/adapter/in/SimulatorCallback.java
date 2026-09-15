@@ -20,15 +20,15 @@ import com.kaizenchandra.awseventbridgedemo.shared.domain.Problem;
 @RestController
 @Profile({"local", "test"})
 public class SimulatorCallback {
-    private final Bookings bookings;
-    private final BlockingBoundary boundary;
+    private final com.kaizenchandra.awseventbridgedemo.payments.application.PaymentCallbacks callbacks;
+    private final reactor.core.scheduler.Scheduler scheduler;
     private final String secret;
     private final Clock clock;
     private final JsonMapper json;
 
-    public SimulatorCallback(Bookings bookings, BlockingBoundary boundary, @Value("${payment.callback-secret}") String secret, Clock clock, JsonMapper json) {
-        this.bookings = bookings;
-        this.boundary = boundary;
+    public SimulatorCallback(com.kaizenchandra.awseventbridgedemo.payments.application.PaymentCallbacks callbacks, reactor.core.scheduler.Scheduler scheduler, @Value("${payment.callback-secret}") String secret, Clock clock, JsonMapper json) {
+        this.callbacks = callbacks;
+        this.scheduler = scheduler;
         this.secret = secret;
         this.clock = clock;
         this.json = json;
@@ -44,6 +44,6 @@ public class SimulatorCallback {
         mac.init(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
         Problem.require(MessageDigest.isEqual(mac.doFinal((timestamp + "." + body).getBytes(StandardCharsets.UTF_8)), HexFormat.of().parseHex(signature)), "INVALID_SIGNATURE");
         var c = json.readValue(body, Callback.class);
-        return boundary.call(() -> bookings.outcome(c.bookingId(), c.success()));
+        return Mono.fromCallable(() -> callbacks.receive(c.bookingId(), c.success())).subscribeOn(scheduler).timeout(Duration.ofSeconds(8));
     }
 }

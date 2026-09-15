@@ -14,7 +14,9 @@ if [[ ! -f .env ]]; then
     printf '%s=%s\n' "$name" "$(openssl rand -hex 24)" >> .env
   done
 fi
-# Container runs as an unprivileged UID. Local keys are demo-only and directory stays private on host.
-chmod 755 .local
-chmod 644 .local/*.der
+# Match the host UID for the local bind mount; production retains the image's non-root user.
+grep -q '^LOCAL_UID=' .env || printf 'LOCAL_UID=%s\n' "$(id -u)" >> .env
+grep -q '^LOCAL_GID=' .env || printf 'LOCAL_GID=%s\n' "$(id -g)" >> .env
+chmod 700 .local
+chmod 600 .local/*.der
 printf 'Local keys and random credentials ready. Export LOCALSTACK_AUTH_TOKEN before docker compose up.\n'

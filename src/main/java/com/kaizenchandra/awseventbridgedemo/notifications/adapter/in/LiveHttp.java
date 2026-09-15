@@ -16,32 +16,33 @@ import com.kaizenchandra.awseventbridgedemo.booking.application.BookingStore;
 @RestController
 @RequestMapping("/api/live")
 public class LiveHttp {
-    private final BlockingBoundary boundary;
+    private final SharedSnapshots shared;
     private final InventoryPort catalog;
     private final BookingStore bookings;
     private final Clock clock;
 
-    public LiveHttp(BlockingBoundary boundary, InventoryPort catalog, BookingStore bookings, Clock clock) {
-        this.boundary = boundary;
+    public LiveHttp(SharedSnapshots shared, InventoryPort catalog, BookingStore bookings, Clock clock) {
+        this.shared = shared;
         this.catalog = catalog;
         this.bookings = bookings;
         this.clock = clock;
     }
 
-    private <T> Flux<ServerSentEvent<T>> snapshots(Jwt jwt, java.util.function.Supplier<T> snapshot) {
+    private Flux<ServerSentEvent<Object>> snapshots(Jwt jwt, String key, java.util.function.Supplier<?> snapshot) {
         long seconds = Math.max(0, Math.min(300, Duration.between(clock.instant(), jwt.getExpiresAt()).getSeconds()));
-        return Flux.interval(Duration.ZERO, Duration.ofSeconds(2)).onBackpressureDrop()
-                .concatMap(tick -> boundary.call(snapshot).map(data -> ServerSentEvent.<T>builder(data).event("snapshot").id(UUID.randomUUID().toString()).retry(Duration.ofSeconds(2)).comment("heartbeat; replace local state").build()), 1)
+        return shared.watch(key, snapshot)
+                .map(data -> ServerSentEvent.builder(data).event("snapshot").id(UUID.randomUUID().toString())
+                        .retry(Duration.ofSeconds(2)).comment("heartbeat; replace local state").build())
                 .onBackpressureLatest().take(Duration.ofSeconds(seconds));
     }
 
     @GetMapping(value = "/shows/{id}", produces = "text/event-stream")
     public Flux<?> show(@AuthenticationPrincipal Jwt jwt, @PathVariable UUID id) {
-        return snapshots(jwt, () -> catalog.seats(id));
+        return snapshots(jwt, "show:" + id, () -> catalog.seats(id));
     }
 
     @GetMapping(value = "/bookings", produces = "text/event-stream")
     public Flux<?> bookings(@AuthenticationPrincipal Jwt jwt) {
-        return snapshots(jwt, () -> bookings.history(jwt.getSubject(), 0, 100));
+        return snapshots(jwt, "user:" + jwt.getSubject(), () -> bookings.history(jwt.getSubject(), 0, 100));
     }
 }

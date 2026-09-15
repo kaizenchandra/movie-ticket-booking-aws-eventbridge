@@ -11,6 +11,12 @@ public interface BookingStore {
 
     Booking get(UUID id);
 
+    Booking lockBooking(UUID id);
+
+    List<UUID> seatOwners(UUID show, List<String> seats);
+
+    void lockSeats(UUID show, List<String> seats);
+
     List<Booking> active(UUID show);
 
     Optional<Booking> byKey(String owner, String key);

@@ -1,5 +1,6 @@
 spring:
   flyway:
+    out-of-order: true
     locations: classpath:db/migration,classpath:db/local
 local:
   keys: ${LOCAL_KEYS:.local}
